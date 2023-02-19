@@ -1,9 +1,10 @@
-# import hunger_games as hg
-from pettingzoo.classic import rps_v2 as hg
+import hunger_games as hg
+# from pettingzoo.classic import rps_v2 as hg
 
 from tianshou.data import Collector
 from tianshou.env import DummyVectorEnv, PettingZooEnv
 from tianshou.policy import MultiAgentPolicyManager, RandomPolicy
+from hunger_games.policy import MyPolicy
 
 if __name__ == "__main__":
     # Step 1: Load the PettingZoo environment
@@ -13,7 +14,7 @@ if __name__ == "__main__":
     env = PettingZooEnv(env)
 
     # Step 3: Define policies for each agent
-    policies = MultiAgentPolicyManager([RandomPolicy(), RandomPolicy()], env)
+    policies = MultiAgentPolicyManager([MyPolicy(), RandomPolicy()], env)
 
     # Step 4: Convert the env to vector format
     env = DummyVectorEnv([lambda: env])

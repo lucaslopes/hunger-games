@@ -32,7 +32,7 @@ def env(render_mode=None): # **kwargs
     elsewhere in the developer documentation.
     """
     internal_render_mode = render_mode if render_mode != "ansi" else "human"
-    env = raw_env(render_mode=internal_render_mode)
+    env = HungerGamesEnvironment(render_mode=internal_render_mode)
     # This wrapper is only for environments which print results to the terminal
     if render_mode == "ansi":
         env = wrappers.CaptureStdoutWrapper(env)
@@ -44,7 +44,7 @@ def env(render_mode=None): # **kwargs
     return env
 
 
-class raw_env(AECEnv):
+class HungerGamesEnvironment(AECEnv):
     """
     The metadata holds environment constants. From gymnasium, we inherit the "render_modes",
     metadata which specifies which modes can be put into the render() method.
