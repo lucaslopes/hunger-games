@@ -19,7 +19,8 @@ import os
 from copy import deepcopy
 from typing import Optional, Tuple
 
-import gym
+# import gym
+import gymnasium as gym
 import numpy as np
 import torch
 from tianshou.data import Collector, VectorReplayBuffer
@@ -102,6 +103,25 @@ def get_args() -> argparse.Namespace:
     return parser.parse_known_args()[0]
 
 
+def get_agent(net, optim, args):
+  return DQNPolicy(
+    net,
+    optim,
+    args.gamma,
+    args.n_step,
+    target_update_freq=args.target_update_freq,
+  )
+
+
+def get_net(args):
+  return  Net(
+      args.state_shape,
+      args.action_shape,
+      hidden_sizes=args.hidden_sizes,
+      device=args.device,
+  ).to(args.device)
+
+
 def get_agents(
     args: argparse.Namespace = get_args(),
     agent_learn: Optional[BasePolicy] = None,
@@ -109,32 +129,20 @@ def get_agents(
     optim: Optional[torch.optim.Optimizer] = None,
 ) -> Tuple[BasePolicy, torch.optim.Optimizer, list]:
     env = get_env()
-    observation_space = (
+    observation_space: gym.spaces.Box = (
         env.observation_space["observation"]
         if isinstance(env.observation_space, gym.spaces.Dict)
         else env.observation_space
     )
-    args.state_shape = (
-        observation_space["observation"].shape or observation_space["observation"].n
-    )
+    
+    args.state_shape = observation_space.shape or observation_space.n
     args.action_shape = env.action_space.shape or env.action_space.n
     if agent_learn is None:
         # model
-        net = Net(
-            args.state_shape,
-            args.action_shape,
-            hidden_sizes=args.hidden_sizes,
-            device=args.device,
-        ).to(args.device)
+        net = get_net(args)
         if optim is None:
             optim = torch.optim.Adam(net.parameters(), lr=args.lr)
-        agent_learn = DQNPolicy(
-            net,
-            optim,
-            args.gamma,
-            args.n_step,
-            target_update_freq=args.target_update_freq,
-        )
+        agent_learn = get_agent(net, optim, args)
         if args.resume_path:
             agent_learn.load_state_dict(torch.load(args.resume_path))
 
@@ -149,6 +157,7 @@ def get_agents(
         agents = [agent_learn, agent_opponent]
     else:
         agents = [agent_opponent, agent_learn]
+    agents = [get_agent(get_net(args), optim, args) for n in range(env.num_agents)]
     policy = MultiAgentPolicyManager(agents, env)
     return policy, optim, env.agents
 
@@ -203,20 +212,20 @@ def train_agent(
                 args.logdir, "tic_tac_toe", "dqn", "policy.pth"
             )
         torch.save(
-            policy.policies[agents[args.agent_id - 1]].state_dict(), model_save_path
+            policy.policies[agents[-1]].state_dict(), model_save_path
         )
 
     def stop_fn(mean_rewards):
         return mean_rewards >= args.win_rate
 
     def train_fn(epoch, env_step):
-        policy.policies[agents[args.agent_id - 1]].set_eps(args.eps_train)
+        policy.policies[agents[-1]].set_eps(args.eps_train)
 
     def test_fn(epoch, env_step):
-        policy.policies[agents[args.agent_id - 1]].set_eps(args.eps_test)
+        policy.policies[agents[-1]].set_eps(args.eps_test)
 
     def reward_metric(rews):
-        return rews[:, args.agent_id - 1]
+        return rews[:,-1]
 
     # trainer
     result = offpolicy_trainer(
@@ -238,7 +247,7 @@ def train_agent(
         reward_metric=reward_metric,
     )
 
-    return result, policy.policies[agents[args.agent_id - 1]]
+    return result, policy.policies[agents[-1]]
 
 
 # ======== a test function that tests a pre-trained agent ======
@@ -252,11 +261,11 @@ def watch(
         args, agent_learn=agent_learn, agent_opponent=agent_opponent
     )
     policy.eval()
-    policy.policies[agents[args.agent_id - 1]].set_eps(args.eps_test)
+    policy.policies[agents[-1]].set_eps(args.eps_test)
     collector = Collector(policy, env, exploration_noise=True)
     result = collector.collect(n_episode=1, render=args.render)
     rews, lens = result["rews"], result["lens"]
-    print(f"Final reward: {rews[:, args.agent_id - 1].mean()}, length: {lens.mean()}")
+    print(f"Final reward: {rews[:, -1].mean()}, length: {lens.mean()}")
 
 
 if __name__ == "__main__":
